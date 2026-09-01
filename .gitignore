@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+.vscode/
+.idea/
+
+# Data
+data/
+training/data/
+
+# Model artifacts
+model/
+model-package/
+model_verification/
+*.joblib
+*.pkl
+*.tar.gz
+
+# Environment / secrets
+.env
+.env.*
+.aws/
+*.pem
+*.key
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Manual SageMaker deployment/test artifacts
+endpoint-config*.json
+model-config*.json
+request.json
+response.json
