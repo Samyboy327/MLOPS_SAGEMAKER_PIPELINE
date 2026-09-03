@@ -8,14 +8,14 @@ from sagemaker.core.shapes import OutputDataConfig
 # --------------------------------------------------
 # 1. AWS Session
 # --------------------------------------------------
-
+'''
 boto_session = boto3.Session(
-    #profile_name="default",
+    profile_name="default",
     region_name="ap-south-1"
 )
 
 print("AWS Region:", boto_session.region_name)
-
+'''
 
 # --------------------------------------------------
 # 2. SageMaker Execution Role
