@@ -10,7 +10,7 @@ from sagemaker.core.shapes import OutputDataConfig
 # --------------------------------------------------
 
 boto_session = boto3.Session(
-    profile_name="default",
+    #profile_name="default",
     region_name="ap-south-1"
 )
 
