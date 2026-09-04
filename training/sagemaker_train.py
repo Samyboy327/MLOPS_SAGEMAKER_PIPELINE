@@ -1,5 +1,6 @@
 import boto3
 
+from sagemaker.core.helper.session_helper import Session
 from sagemaker.train import ModelTrainer
 from sagemaker.train.configs import Compute, SourceCode, InputData
 from sagemaker.core.shapes import OutputDataConfig
@@ -8,14 +9,18 @@ from sagemaker.core.shapes import OutputDataConfig
 # --------------------------------------------------
 # 1. AWS Session
 # --------------------------------------------------
-'''
+
 boto_session = boto3.Session(
-    profile_name="default",
     region_name="ap-south-1"
 )
 
+sagemaker_session = Session(
+    boto_session=boto_session,
+    default_bucket="rohit-telecom-churn-data-2026"
+)
+
 print("AWS Region:", boto_session.region_name)
-'''
+print("SageMaker default bucket:", sagemaker_session.default_bucket())
 
 # --------------------------------------------------
 # 2. SageMaker Execution Role
@@ -105,7 +110,8 @@ trainer = ModelTrainer(
     role=ROLE_ARN,
     compute=compute,
     output_data_config=output_config,
-    base_job_name="telecom-churn-training"
+    base_job_name="telecom-churn-training",
+    sagemaker_session=sagemaker_session
 )
 
 print("ModelTrainer configured successfully")
