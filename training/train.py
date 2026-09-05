@@ -82,6 +82,26 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
+# Save test data for SageMaker evaluation
+test_dir = os.environ.get(
+    "SM_OUTPUT_DATA_DIR",
+    "/opt/ml/output"
+)
+
+os.makedirs(test_dir, exist_ok=True)
+
+test_data = X_test.copy()
+test_data["Churn"] = y_test
+
+test_path = os.path.join(
+    test_dir,
+    "test.csv"
+)
+
+test_data.to_csv(test_path, index=False)
+
+print(f"Test data saved to: {test_path}")
+
 print("Training data:", X_train.shape)
 print("Testing data:", X_test.shape)
 
