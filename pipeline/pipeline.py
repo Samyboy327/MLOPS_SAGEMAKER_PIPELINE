@@ -50,3 +50,4 @@ if __name__ == "__main__":
 
     print("Pipeline definition generated successfully.")
     print(definition)
+    
