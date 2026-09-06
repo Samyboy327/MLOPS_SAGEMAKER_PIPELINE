@@ -153,3 +153,11 @@ if __name__ == "__main__":
     )
 
     print(definition)
+
+    print("Creating/updating SageMaker Pipeline...")
+
+    pipeline.upsert(
+        role_arn=ROLE_ARN
+    )
+
+    print("SageMaker Pipeline created/updated successfully.")
