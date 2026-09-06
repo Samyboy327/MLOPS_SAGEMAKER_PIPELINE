@@ -47,9 +47,10 @@ def get_pipeline():
 
     processor = ScriptProcessor(
         image_uri=(
-            "683313688378.dkr.ecr.ap-south-1.amazonaws.com/"
-            "sagemaker-scikit-learn:1.2-1-cpu-py3"
+        "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
+        "sagemaker-scikit-learn:1.4-2-cpu-py3"
         ),
+        
         command=["python3"],
         instance_type="ml.m5.large",
         instance_count=1,
