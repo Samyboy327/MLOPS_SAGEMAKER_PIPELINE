@@ -101,9 +101,7 @@ def get_pipeline():
         sagemaker_session=sagemaker_session
     )
 
-    estimator.set_hyperparameters(
-        max_iter=1000
-    )
+
 
     training_step = TrainingStep(
         name="ModelTraining",
