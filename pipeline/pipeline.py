@@ -4,6 +4,7 @@ import os
 
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import ProcessingStep, TrainingStep
+from sagemaker.workflow.step_collections import RegisterModel
 from sagemaker.workflow.properties import PropertyFile
 from sagemaker.workflow.conditions import ConditionGreaterThanOrEqualTo
 from sagemaker.workflow.condition_step import ConditionStep
@@ -12,8 +13,17 @@ from sagemaker.processing import ScriptProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
 from sagemaker.estimator import Estimator
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TRAINING_DIR = os.path.join(PROJECT_ROOT, "training")
+
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+TRAINING_DIR = os.path.join(
+    PROJECT_ROOT,
+    "training"
+)
 
 
 REGION = "ap-south-1"
@@ -21,6 +31,8 @@ REGION = "ap-south-1"
 BUCKET = "rohit-telecom-churn-data-2026"
 
 PIPELINE_NAME = "CustomerChurnPipeline"
+
+MODEL_PACKAGE_GROUP_NAME = "CustomerChurnModelGroup"
 
 ROLE_ARN = (
     "arn:aws:iam::419022575435:"
@@ -55,8 +67,8 @@ def get_pipeline():
 
     processor = ScriptProcessor(
         image_uri=(
-        "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
-        "sagemaker-scikit-learn:1.4-2-cpu-py3"
+            "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
+            "sagemaker-scikit-learn:1.4-2-cpu-py3"
         ),
 
         command=["python3"],
@@ -94,22 +106,24 @@ def get_pipeline():
         ]
     )
 
+
     # --------------------------------------------------
     # 2. Training
     # --------------------------------------------------
 
     estimator = Estimator(
-    image_uri=TRAINING_IMAGE,
-    role=ROLE_ARN,
-    instance_type="ml.m5.large",
-    instance_count=1,
-    output_path=f"s3://{BUCKET}/model-artifacts/",
-    base_job_name="telecom-churn-pipeline-training",
-    entry_point="train.py",
-    source_dir=TRAINING_DIR,
-    sagemaker_session=sagemaker_session
+        image_uri=TRAINING_IMAGE,
+        role=ROLE_ARN,
+        instance_type="ml.m5.large",
+        instance_count=1,
+        output_path=(
+            f"s3://{BUCKET}/model-artifacts/"
+        ),
+        base_job_name="telecom-churn-pipeline-training",
+        entry_point="train.py",
+        source_dir=TRAINING_DIR,
+        sagemaker_session=sagemaker_session
     )
-
 
 
     training_step = TrainingStep(
@@ -118,9 +132,14 @@ def get_pipeline():
         estimator=estimator,
 
         inputs={
-            "train": processing_step.properties.ProcessingOutputConfig.Outputs[
-                "output-1"
-            ].S3Output.S3Uri
+            "train": (
+                processing_step
+                .properties
+                .ProcessingOutputConfig
+                .Outputs["output-1"]
+                .S3Output
+                .S3Uri
+            )
         }
     )
 
@@ -134,6 +153,7 @@ def get_pipeline():
             "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
             "sagemaker-scikit-learn:1.4-2-cpu-py3"
         ),
+
         command=["python3"],
         instance_type="ml.m5.large",
         instance_count=1,
@@ -141,11 +161,13 @@ def get_pipeline():
         sagemaker_session=sagemaker_session
     )
 
+
     evaluation_report = PropertyFile(
         name="EvaluationReport",
         output_name="evaluation",
         path="evaluation.json"
     )
+
 
     evaluation_step = ProcessingStep(
         name="Evaluation",
@@ -159,13 +181,19 @@ def get_pipeline():
         ),
 
         inputs=[
+
+            # Model artifact from Training
             ProcessingInput(
                 source=(
-                    training_step.properties.ModelArtifacts.S3ModelArtifacts
+                    training_step
+                    .properties
+                    .ModelArtifacts
+                    .S3ModelArtifacts
                 ),
                 destination="/opt/ml/processing/model"
             ),
 
+            # Processed dataset from Processing
             ProcessingInput(
                 source=(
                     processing_step
@@ -194,42 +222,100 @@ def get_pipeline():
         ]
     )
 
+
     # --------------------------------------------------
-    # 4. Accuracy Check
+    # 4. Model Registration
+    # --------------------------------------------------
+
+    register_model_step = RegisterModel(
+
+        name="RegisterModel",
+
+        estimator=estimator,
+
+        model_data=(
+            training_step
+            .properties
+            .ModelArtifacts
+            .S3ModelArtifacts
+        ),
+
+        content_types=[
+            "text/csv"
+        ],
+
+        response_types=[
+            "text/csv"
+        ],
+
+        inference_instances=[
+            "ml.m5.large"
+        ],
+
+        transform_instances=[
+            "ml.m5.large"
+        ],
+
+        model_package_group_name=(
+            MODEL_PACKAGE_GROUP_NAME
+        ),
+
+        approval_status=(
+            "PendingManualApproval"
+        )
+    )
+
+
+    # --------------------------------------------------
+    # 5. Accuracy Check
     # --------------------------------------------------
 
     accuracy_condition = ConditionStep(
+
         name="AccuracyCheck",
 
         conditions=[
+
             ConditionGreaterThanOrEqualTo(
+
                 left=JsonGet(
                     step_name=evaluation_step.name,
                     property_file=evaluation_report,
                     json_path="metrics.accuracy.value"
                 ),
+
                 right=0.60
             )
         ],
 
-        if_steps=[],
+        # If accuracy >= 60%
+        if_steps=[
+            register_model_step
+        ],
 
+        # If accuracy < 60%
+        # Pipeline stops without registration
         else_steps=[]
     )
 
+
     # --------------------------------------------------
-    # 5. Pipeline
+    # 6. Pipeline
     # --------------------------------------------------
 
     pipeline = Pipeline(
+
         name=PIPELINE_NAME,
+
         parameters=[],
+
         steps=[
             processing_step,
             training_step,
             evaluation_step,
             accuracy_condition
         ],
+
         sagemaker_session=sagemaker_session
     )
 
@@ -258,10 +344,15 @@ if __name__ == "__main__":
 
     print(definition)
 
-    print("Creating/updating SageMaker Pipeline...")
+    print(
+        "Creating/updating SageMaker Pipeline..."
+    )
 
     pipeline.upsert(
         role_arn=ROLE_ARN
     )
 
-    print("SageMaker Pipeline created/updated successfully.")
+    print(
+        "SageMaker Pipeline created/updated successfully."
+    )
+
