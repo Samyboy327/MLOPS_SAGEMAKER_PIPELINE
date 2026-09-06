@@ -2,10 +2,10 @@ import boto3
 import sagemaker
 
 from sagemaker.workflow.pipeline import Pipeline
-from sagemaker.workflow.steps import ProcessingStep
+from sagemaker.workflow.steps import ProcessingStep, TrainingStep
 from sagemaker.processing import ScriptProcessor
-from sagemaker.processing import ProcessingInput
-from sagemaker.processing import ProcessingOutput
+from sagemaker.processing import ProcessingInput, ProcessingOutput
+from sagemaker.estimator import Estimator
 
 
 REGION = "ap-south-1"
@@ -23,6 +23,11 @@ RAW_PROCESSED_DATA_URI = (
     f"s3://{BUCKET}/processed/customer_clean.csv"
 )
 
+TRAINING_IMAGE = (
+    "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
+    "sagemaker-scikit-learn:1.4-2-py312-cpu-py3"
+)
+
 
 boto_session = boto3.Session(
     region_name=REGION
@@ -35,6 +40,10 @@ sagemaker_session = sagemaker.Session(
 
 
 def get_pipeline():
+
+    # --------------------------------------------------
+    # 1. Processing
+    # --------------------------------------------------
 
     processor = ScriptProcessor(
         image_uri=(
@@ -76,10 +85,49 @@ def get_pipeline():
         ]
     )
 
+    # --------------------------------------------------
+    # 2. Training
+    # --------------------------------------------------
+
+    estimator = Estimator(
+        image_uri=TRAINING_IMAGE,
+        role=ROLE_ARN,
+        instance_type="ml.m5.large",
+        instance_count=1,
+        output_path=(
+            f"s3://{BUCKET}/model-artifacts/"
+        ),
+        base_job_name="telecom-churn-pipeline-training",
+        sagemaker_session=sagemaker_session
+    )
+
+    estimator.set_hyperparameters(
+        max_iter=1000
+    )
+
+    training_step = TrainingStep(
+        name="ModelTraining",
+
+        estimator=estimator,
+
+        inputs={
+            "train": processing_step.properties.ProcessingOutputConfig.Outputs[
+                "output-1"
+            ].S3Output.S3Uri
+        }
+    )
+
+    # --------------------------------------------------
+    # 3. Pipeline
+    # --------------------------------------------------
+
     pipeline = Pipeline(
         name=PIPELINE_NAME,
         parameters=[],
-        steps=[processing_step],
+        steps=[
+            processing_step,
+            training_step
+        ],
         sagemaker_session=sagemaker_session
     )
 
