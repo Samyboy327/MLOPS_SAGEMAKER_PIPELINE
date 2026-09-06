@@ -1,11 +1,15 @@
 import boto3
 import sagemaker
+import os
 
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import ProcessingStep, TrainingStep
 from sagemaker.processing import ScriptProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
 from sagemaker.estimator import Estimator
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TRAINING_DIR = os.path.join(PROJECT_ROOT, "training")
 
 
 REGION = "ap-south-1"
@@ -50,7 +54,7 @@ def get_pipeline():
         "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
         "sagemaker-scikit-learn:1.4-2-cpu-py3"
         ),
-        
+
         command=["python3"],
         instance_type="ml.m5.large",
         instance_count=1,
@@ -91,15 +95,15 @@ def get_pipeline():
     # --------------------------------------------------
 
     estimator = Estimator(
-        image_uri=TRAINING_IMAGE,
-        role=ROLE_ARN,
-        instance_type="ml.m5.large",
-        instance_count=1,
-        output_path=(
-            f"s3://{BUCKET}/model-artifacts/"
-        ),
-        base_job_name="telecom-churn-pipeline-training",
-        sagemaker_session=sagemaker_session
+    image_uri=TRAINING_IMAGE,
+    role=ROLE_ARN,
+    instance_type="ml.m5.large",
+    instance_count=1,
+    output_path=f"s3://{BUCKET}/model-artifacts/",
+    base_job_name="telecom-churn-pipeline-training",
+    entry_point="train.py",
+    source_dir=TRAINING_DIR,
+    sagemaker_session=sagemaker_session
     )
 
 
