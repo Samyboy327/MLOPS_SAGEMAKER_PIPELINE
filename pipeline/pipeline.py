@@ -4,6 +4,10 @@ import os
 
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import ProcessingStep, TrainingStep
+from sagemaker.workflow.properties import PropertyFile
+from sagemaker.workflow.conditions import ConditionGreaterThanOrEqualTo
+from sagemaker.workflow.condition_step import ConditionStep
+from sagemaker.workflow.functions import JsonGet
 from sagemaker.processing import ScriptProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
 from sagemaker.estimator import Estimator
@@ -120,8 +124,101 @@ def get_pipeline():
         }
     )
 
+
     # --------------------------------------------------
-    # 3. Pipeline
+    # 3. Evaluation
+    # --------------------------------------------------
+
+    evaluation_processor = ScriptProcessor(
+        image_uri=(
+            "720646828776.dkr.ecr.ap-south-1.amazonaws.com/"
+            "sagemaker-scikit-learn:1.4-2-cpu-py3"
+        ),
+        command=["python3"],
+        instance_type="ml.m5.large",
+        instance_count=1,
+        role=ROLE_ARN,
+        sagemaker_session=sagemaker_session
+    )
+
+    evaluation_report = PropertyFile(
+        name="EvaluationReport",
+        output_name="evaluation",
+        path="evaluation.json"
+    )
+
+    evaluation_step = ProcessingStep(
+        name="Evaluation",
+
+        processor=evaluation_processor,
+
+        code=(
+            "/var/lib/jenkins/workspace/"
+            "MLOPS-SageMaker-Pipeline/"
+            "training/evaluate.py"
+        ),
+
+        inputs=[
+            ProcessingInput(
+                source=(
+                    training_step.properties.ModelArtifacts.S3ModelArtifacts
+                ),
+                destination="/opt/ml/processing/model"
+            ),
+
+            ProcessingInput(
+                source=(
+                    processing_step
+                    .properties
+                    .ProcessingOutputConfig
+                    .Outputs["output-1"]
+                    .S3Output
+                    .S3Uri
+                ),
+                destination="/opt/ml/processing/data"
+            )
+        ],
+
+        outputs=[
+            ProcessingOutput(
+                output_name="evaluation",
+                source="/opt/ml/processing/evaluation",
+                destination=(
+                    f"s3://{BUCKET}/pipeline/evaluation/"
+                )
+            )
+        ],
+
+        property_files=[
+            evaluation_report
+        ]
+    )
+
+    # --------------------------------------------------
+    # 4. Accuracy Check
+    # --------------------------------------------------
+
+    accuracy_condition = ConditionStep(
+        name="AccuracyCheck",
+
+        conditions=[
+            ConditionGreaterThanOrEqualTo(
+                left=JsonGet(
+                    step_name=evaluation_step.name,
+                    property_file=evaluation_report,
+                    json_path="metrics.accuracy.value"
+                ),
+                right=0.60
+            )
+        ],
+
+        if_steps=[],
+
+        else_steps=[]
+    )
+
+    # --------------------------------------------------
+    # 5. Pipeline
     # --------------------------------------------------
 
     pipeline = Pipeline(
@@ -129,7 +226,9 @@ def get_pipeline():
         parameters=[],
         steps=[
             processing_step,
-            training_step
+            training_step,
+            evaluation_step,
+            accuracy_condition
         ],
         sagemaker_session=sagemaker_session
     )
