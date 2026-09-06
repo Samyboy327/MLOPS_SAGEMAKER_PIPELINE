@@ -2,6 +2,10 @@ import boto3
 import sagemaker
 
 from sagemaker.workflow.pipeline import Pipeline
+from sagemaker.workflow.steps import ProcessingStep
+from sagemaker.processing import ScriptProcessor
+from sagemaker.processing import ProcessingInput
+from sagemaker.processing import ProcessingOutput
 
 
 REGION = "ap-south-1"
@@ -15,8 +19,14 @@ ROLE_ARN = (
     "role/telecom-churn-sagemaker-role"
 )
 
+RAW_PROCESSED_DATA_URI = (
+    f"s3://{BUCKET}/processed/customer_clean.csv"
+)
 
-boto_session = boto3.Session(region_name=REGION)
+
+boto_session = boto3.Session(
+    region_name=REGION
+)
 
 sagemaker_session = sagemaker.Session(
     boto_session=boto_session,
@@ -25,14 +35,51 @@ sagemaker_session = sagemaker.Session(
 
 
 def get_pipeline():
-    """
-    Create and return the SageMaker Pipeline definition.
-    """
+
+    processor = ScriptProcessor(
+        image_uri=(
+            "683313688378.dkr.ecr.ap-south-1.amazonaws.com/"
+            "sagemaker-scikit-learn:1.2-1-cpu-py3"
+        ),
+        command=["python3"],
+        instance_type="ml.m5.large",
+        instance_count=1,
+        role=ROLE_ARN,
+        sagemaker_session=sagemaker_session
+    )
+
+    processing_step = ProcessingStep(
+        name="DataProcessing",
+
+        processor=processor,
+
+        code=(
+            "/var/lib/jenkins/workspace/"
+            "MLOPS-SageMaker-Pipeline/"
+            "src/processing/pipeline_processing.py"
+        ),
+
+        inputs=[
+            ProcessingInput(
+                source=RAW_PROCESSED_DATA_URI,
+                destination="/opt/ml/processing/input"
+            )
+        ],
+
+        outputs=[
+            ProcessingOutput(
+                source="/opt/ml/processing/output",
+                destination=(
+                    f"s3://{BUCKET}/pipeline/processing-output/"
+                )
+            )
+        ]
+    )
 
     pipeline = Pipeline(
         name=PIPELINE_NAME,
         parameters=[],
-        steps=[],
+        steps=[processing_step],
         sagemaker_session=sagemaker_session
     )
 
@@ -43,11 +90,20 @@ if __name__ == "__main__":
 
     pipeline = get_pipeline()
 
-    print("SageMaker SDK version:", sagemaker.__version__)
-    print("Pipeline name:", PIPELINE_NAME)
+    print(
+        "SageMaker SDK version:",
+        sagemaker.__version__
+    )
+
+    print(
+        "Pipeline name:",
+        PIPELINE_NAME
+    )
 
     definition = pipeline.definition()
 
-    print("Pipeline definition generated successfully.")
+    print(
+        "Pipeline definition generated successfully."
+    )
+
     print(definition)
-    
