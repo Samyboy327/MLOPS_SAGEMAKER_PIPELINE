@@ -261,7 +261,7 @@ def get_pipeline():
         ),
 
         approval_status=(
-            "PendingManualApproval"
+            "Approved"
         )
     )
 
