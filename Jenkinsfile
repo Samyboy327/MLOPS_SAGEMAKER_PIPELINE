@@ -14,6 +14,14 @@ pipeline {
             }
         }
 
+        stage('Update SageMaker Pipeline') {
+            steps {
+                sh '''
+                    /opt/sagemaker-pipeline-venv/bin/python pipeline/pipeline.py
+                '''
+            }
+        }
+
         stage('Start SageMaker Pipeline') {
             steps {
                 script {
@@ -84,3 +92,4 @@ pipeline {
         }
     }
 }
+
