@@ -115,6 +115,7 @@ pipeline {
             }
         }
 
+    
         stage('Create SageMaker Model') {
             steps {
                 script {
@@ -141,16 +142,27 @@ pipeline {
 
                         set -e
 
-                        IMAGE_URI=\$(python3 -c "import json; print(json.load(open('container.json'))['Image'])")
-                        MODEL_DATA_URL=\$(python3 -c "import json; print(json.load(open('container.json'))['ModelDataUrl'])")
+                        IMAGE_URI=\\$(python3 -c "import json; print(json.load(open('container.json'))['Image'])")
+                        MODEL_DATA_URL=\\$(python3 -c "import json; print(json.load(open('container.json'))['ModelDataUrl'])")
+
+                        cat > primary-container.json <<EOF
+{
+    "Image": "\\$IMAGE_URI",
+    "Mode": "SingleModel",
+    "ModelDataUrl": "\\$MODEL_DATA_URL",
+    "Environment": {
+        "SAGEMAKER_PROGRAM": "inference.py",
+        "SAGEMAKER_SUBMIT_DIRECTORY": "s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz",
+        "SAGEMAKER_CONTAINER_LOG_LEVEL": "20",
+        "SAGEMAKER_REGION": "ap-south-1"
+    }
+}
+EOF
 
                         aws sagemaker create-model \
                             --model-name ${modelName} \
                             --execution-role-arn arn:aws:iam::419022575435:role/telecom-churn-sagemaker-role \
-                            --primary-container \
-                                Image=\$IMAGE_URI, \
-                                ModelDataUrl=\$MODEL_DATA_URL, \
-                                Environment="{SAGEMAKER_PROGRAM=inference.py,SAGEMAKER_SUBMIT_DIRECTORY=s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz,SAGEMAKER_CONTAINER_LOG_LEVEL=20,SAGEMAKER_REGION=ap-south-1}" \
+                            --primary-container file://primary-container.json \
                             --region ${AWS_REGION}
                     """
 
@@ -161,7 +173,6 @@ pipeline {
                 }
             }
         }
-
 
     stage('Create Endpoint Configuration') {
         steps {
@@ -244,9 +255,9 @@ pipeline {
                 }
             }
         }
-        stage('Deployment  Successful') {
+        stage('Deployment Successful') {
             steps {
-                echo 'SageMaker deployment  completed successfully.'
+                echo 'SageMaker deployment completed successfully.'
             }
         }
     }
