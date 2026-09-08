@@ -115,6 +115,50 @@ pipeline {
             }
         }
 
+        stage('Create SageMaker Model') {
+            steps {
+                script {
+
+                    def modelName = "CustomerChurnModel-${env.BUILD_NUMBER}"
+
+                    def containerInfo = sh(
+                        script: """
+                            aws sagemaker describe-model-package \
+                                --model-package-name ${MODEL_PACKAGE_ARN} \
+                                --region ${AWS_REGION} \
+                                --query 'InferenceSpecification.Containers[0]' \
+                                --output json
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    writeFile(
+                        file: 'container.json',
+                        text: containerInfo
+                    )
+
+                    sh """
+
+                        set -e
+
+                        IMAGE_URI=\$(python3 -c "import json; print(json.load(open('container.json'))['Image'])")
+                        MODEL_DATA_URL=\$(python3 -c "import json; print(json.load(open('container.json'))['ModelDataUrl'])")
+
+                        aws sagemaker create-model \
+                            --model-name ${modelName} \
+                            --execution-role-arn arn:aws:iam::419022575435:role/telecom-churn-sagemaker-role \
+                            --primary-container Image=\$IMAGE_URI,ModelDataUrl=\$MODEL_DATA_URL \
+                            --region ${AWS_REGION}
+                    """
+
+                    echo "SageMaker Model Created:"
+                    echo modelName
+
+                    env.SAGEMAKER_MODEL_NAME = modelName
+                }
+            }
+        }
+
         stage('Pipeline Successful') {
             steps {
                 echo 'SageMaker Pipeline completed successfully.'
@@ -122,4 +166,3 @@ pipeline {
         }
     }
 }
-
