@@ -85,6 +85,36 @@ pipeline {
             }
         }
 
+        stage('Find Latest Approved Model') {
+            steps {
+                script {
+
+                    def modelPackageArn = sh(
+                        script: """
+                            aws sagemaker list-model-packages \
+                                --model-package-group-name CustomerChurnModelGroup \
+                                --region ${AWS_REGION} \
+                                --sort-by CreationTime \
+                                --sort-order Descending \
+                                --max-results 20 \
+                                --query 'ModelPackageSummaryList[?ModelApprovalStatus==`Approved`] | [0].ModelPackageArn' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    if (!modelPackageArn || modelPackageArn == 'None') {
+                        error('No Approved model package found.')
+                    }
+
+                    echo "Latest Approved Model Package:"
+                    echo modelPackageArn
+
+                    env.MODEL_PACKAGE_ARN = modelPackageArn
+                }
+            }
+        }
+
         stage('Pipeline Successful') {
             steps {
                 echo 'SageMaker Pipeline completed successfully.'
