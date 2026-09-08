@@ -147,7 +147,10 @@ pipeline {
                         aws sagemaker create-model \
                             --model-name ${modelName} \
                             --execution-role-arn arn:aws:iam::419022575435:role/telecom-churn-sagemaker-role \
-                            --primary-container Image=\$IMAGE_URI,ModelDataUrl=\$MODEL_DATA_URL \
+                            --primary-container \
+                                Image=$IMAGE_URI, \
+                                ModelDataUrl=$MODEL_DATA_URL, \
+                                Environment="{SAGEMAKER_PROGRAM=inference.py,SAGEMAKER_SUBMIT_DIRECTORY=s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz,SAGEMAKER_CONTAINER_LOG_LEVEL=20,SAGEMAKER_REGION=ap-south-1}" \
                             --region ${AWS_REGION}
                     """
 
