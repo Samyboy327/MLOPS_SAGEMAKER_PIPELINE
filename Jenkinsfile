@@ -159,9 +159,91 @@ pipeline {
             }
         }
 
-        stage('Pipeline Successful') {
+
+    stage('Create Endpoint Configuration') {
+        steps {
+             script {
+
+                    def endpointConfigName = "customer-churn-endpoint-config-${env.BUILD_NUMBER}"
+
+                    sh """
+                        set -e
+
+                        aws sagemaker create-endpoint-config \
+                            --endpoint-config-name ${endpointConfigName} \
+                            --production-variants \
+                                VariantName=AllTraffic,ModelName=${SAGEMAKER_MODEL_NAME},InitialInstanceCount=1,InstanceType=ml.m5.large,InitialVariantWeight=1.0 \
+                            --region ${AWS_REGION}
+                    """
+
+                    echo "SageMaker Endpoint Configuration Created:"
+                    echo endpointConfigName
+
+                    env.SAGEMAKER_ENDPOINT_CONFIG_NAME = endpointConfigName
+                }
+            }
+        }
+
+        stage('Update SageMaker Endpoint') {
             steps {
-                echo 'SageMaker Pipeline completed successfully.'
+                script {
+
+                    sh """
+                        set -e
+
+                        aws sagemaker update-endpoint \
+                            --endpoint-name customer-churn-endpoint \
+                            --endpoint-config-name ${SAGEMAKER_ENDPOINT_CONFIG_NAME} \
+                            --region ${AWS_REGION}
+                    """
+
+                    echo "SageMaker Endpoint Update Started:"
+                    echo "customer-churn-endpoint"
+                }
+            }
+        }    
+        stage('Wait for SageMaker Endpoint') {
+            steps {
+                script {
+
+                    timeout(time: 20, unit: 'MINUTES') {
+
+                        waitUntil {
+
+                            def status = sh(
+                                script: """
+                                    aws sagemaker describe-endpoint \
+                                        --endpoint-name customer-churn-endpoint \
+                                        --region ${AWS_REGION} \
+                                        --query 'EndpointStatus' \
+                                        --output text
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            echo "SageMaker Endpoint Status: ${status}"
+
+                            if (status == 'InService') {
+                                return true
+                            }
+
+                            if (status in ['Failed', 'OutOfService']) {
+                                error(
+                                    "SageMaker endpoint deployment failed with status: ${status}"
+                                )
+                            }
+
+                            sleep(time: 30, unit: 'SECONDS')
+
+                            return false
+                        }
+                    }
+                }
+            }
+        }
+        stage('Deployment  Successful') {
+            steps {
+                echo 'SageMaker deployment  completed successfully.'
             }
         }
     }
