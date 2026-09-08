@@ -115,13 +115,72 @@ pipeline {
             }
         }
 
-    
-        stage('Create SageMaker Model') { steps { script { def modelName = "CustomerChurnModel-${env.BUILD_NUMBER}" def containerInfo = sh( script: """ aws sagemaker describe-model-package \ --model-package-name ${MODEL_PACKAGE_ARN} \ --region ${AWS_REGION} \ --query 'InferenceSpecification.Containers[0]' \ --output json """, returnStdout: true ).trim() writeFile( file: 'container.json', text: containerInfo ) env.NEW_MODEL_NAME = modelName sh ''' set -e IMAGE_URI=$(python3 -c "import json; print(json.load(open('container.json'))['Image'])") MODEL_DATA_URL=$(python3 -c "import json; print(json.load(open('container.json'))['ModelDataUrl'])") cat > primary-container.json <<EOF { "Image": "$IMAGE_URI", "Mode": "SingleModel", "ModelDataUrl": "$MODEL_DATA_URL", "Environment": { "SAGEMAKER_PROGRAM": "inference.py", "SAGEMAKER_SUBMIT_DIRECTORY": "s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz", "SAGEMAKER_CONTAINER_LOG_LEVEL": "20", "SAGEMAKER_REGION": "ap-south-1" } } EOF aws sagemaker create-model \ --model-name "$NEW_MODEL_NAME" \ --execution-role-arn arn:aws:iam::419022575435:role/telecom-churn-sagemaker-role \ --primary-container file://primary-container.json \ --region "$AWS_REGION" ''' echo "SageMaker Model Created:" echo modelName env.SAGEMAKER_MODEL_NAME = modelName } } }
-    stage('Create Endpoint Configuration') {
-        steps {
-             script {
+        stage('Create SageMaker Model') {
+            steps {
+                script {
 
-                    def endpointConfigName = "customer-churn-endpoint-config-${env.BUILD_NUMBER}"
+                    def modelName = "CustomerChurnModel-${env.BUILD_NUMBER}"
+
+                    def containerInfo = sh(
+                        script: """
+                            aws sagemaker describe-model-package \
+                                --model-package-name ${MODEL_PACKAGE_ARN} \
+                                --region ${AWS_REGION} \
+                                --query 'InferenceSpecification.Containers[0]' \
+                                --output json
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    writeFile(
+                        file: 'container.json',
+                        text: containerInfo
+                    )
+
+                    env.SAGEMAKER_MODEL_NAME = modelName
+
+                    sh '''
+                        set -e
+
+                        IMAGE_URI=$(python3 -c "import json; print(json.load(open('container.json'))['Image'])")
+                        MODEL_DATA_URL=$(python3 -c "import json; print(json.load(open('container.json'))['ModelDataUrl'])")
+
+                        cat > primary-container.json <<EOF
+{
+    "Image": "$IMAGE_URI",
+    "Mode": "SingleModel",
+    "ModelDataUrl": "$MODEL_DATA_URL",
+    "Environment": {
+        "SAGEMAKER_PROGRAM": "inference.py",
+        "SAGEMAKER_SUBMIT_DIRECTORY": "s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz",
+        "SAGEMAKER_CONTAINER_LOG_LEVEL": "20",
+        "SAGEMAKER_REGION": "ap-south-1"
+    }
+}
+EOF
+
+                        echo "Primary container configuration:"
+                        cat primary-container.json
+
+                        aws sagemaker create-model \
+                            --model-name "$SAGEMAKER_MODEL_NAME" \
+                            --execution-role-arn arn:aws:iam::419022575435:role/telecom-churn-sagemaker-role \
+                            --primary-container file://primary-container.json \
+                            --region "$AWS_REGION"
+                    '''
+
+                    echo "SageMaker Model Created:"
+                    echo modelName
+                }
+            }
+        }
+
+        stage('Create Endpoint Configuration') {
+            steps {
+                script {
+
+                    def endpointConfigName =
+                        "customer-churn-endpoint-config-${env.BUILD_NUMBER}"
 
                     sh """
                         set -e
@@ -158,7 +217,8 @@ pipeline {
                     echo "customer-churn-endpoint"
                 }
             }
-        }    
+        }
+
         stage('Wait for SageMaker Endpoint') {
             steps {
                 script {
@@ -198,6 +258,7 @@ pipeline {
                 }
             }
         }
+
         stage('Deployment Successful') {
             steps {
                 echo 'SageMaker deployment completed successfully.'
@@ -205,3 +266,4 @@ pipeline {
         }
     }
 }
+
