@@ -115,6 +115,35 @@ pipeline {
             }
         }
 
+                stage('Package Inference Source') {
+            steps {
+                sh '''
+                    set -e
+
+                    rm -rf /tmp/jenkins-churn-source
+                    mkdir -p /tmp/jenkins-churn-source
+
+                    cp training/inference.py /tmp/jenkins-churn-source/
+
+                    tar -czf /tmp/jenkins-churn-source.tar.gz \
+                        -C /tmp/jenkins-churn-source \
+                        inference.py
+
+                    S3_SOURCE_URI="s3://rohit-telecom-churn-data-2026/pipeline/inference-source/build-${BUILD_NUMBER}/sourcedir.tar.gz"
+
+                    aws s3 cp \
+                        /tmp/jenkins-churn-source.tar.gz \
+                        "$S3_SOURCE_URI" \
+                        --region "$AWS_REGION"
+
+                    echo "Inference source uploaded:"
+                    echo "$S3_SOURCE_URI"
+
+                    echo "$S3_SOURCE_URI" > inference_source_uri.txt
+                '''
+            }
+        }
+
         stage('Create SageMaker Model') {
             steps {
                 script {
@@ -152,7 +181,7 @@ pipeline {
     "ModelDataUrl": "$MODEL_DATA_URL",
     "Environment": {
         "SAGEMAKER_PROGRAM": "inference.py",
-        "SAGEMAKER_SUBMIT_DIRECTORY": "s3://rohit-telecom-churn-data-2026/customer-churn-model-v1-fixed/sourcedir.tar.gz",
+        "SAGEMAKER_SUBMIT_DIRECTORY": "$(cat inference_source_uri.txt)",
         "SAGEMAKER_CONTAINER_LOG_LEVEL": "20",
         "SAGEMAKER_REGION": "ap-south-1"
     }
