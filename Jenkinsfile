@@ -233,21 +233,55 @@ EOF
             steps {
                 script {
 
-                    sh """
-                        set -e
+                    def endpointExists = sh(
+                        script: """
+                        aws sagemaker describe-endpoint \
+                        --endpoint-name customer-churn-endpoint \
+                        --region ${AWS_REGION} \
+                        --query 'EndpointName' \
+                        --output text 2>/dev/null || true
+                """,
+                    returnStdout: true
+            ).trim()
 
-                        aws sagemaker update-endpoint \
-                            --endpoint-name customer-churn-endpoint \
-                            --endpoint-config-name ${SAGEMAKER_ENDPOINT_CONFIG_NAME} \
-                            --region ${AWS_REGION}
-                    """
+            if (endpointExists == 'customer-churn-endpoint') {
 
-                    echo "SageMaker Endpoint Update Started:"
-                    echo "customer-churn-endpoint"
-                }
+                echo "Endpoint exists. Updating endpoint..."
+
+                sh """
+                    set -e
+
+                    aws sagemaker update-endpoint \
+                        --endpoint-name customer-churn-endpoint \
+                        --endpoint-config-name ${SAGEMAKER_ENDPOINT_CONFIG_NAME} \
+                        --region ${AWS_REGION}
+                """
+
+                echo "SageMaker Endpoint Update Started:"
+                echo "customer-churn-endpoint"
+
+            } else {
+
+                echo "Endpoint does not exist. Creating endpoint..."
+
+                sh """
+                    set -e
+
+                    aws sagemaker create-endpoint \
+                        --endpoint-name customer-churn-endpoint \
+                        --endpoint-config-name ${SAGEMAKER_ENDPOINT_CONFIG_NAME} \
+                        --region ${AWS_REGION}
+                """
+
+                echo "SageMaker Endpoint Creation Started:"
+                echo "customer-churn-endpoint"
             }
         }
+    }
+}
 
+
+        
         stage('Wait for SageMaker Endpoint') {
             steps {
                 script {
